@@ -1,0 +1,34 @@
+{
+  "name": "nodebeanstalk_deploy",
+  "version": "0.0.10",
+  "description": "Sample how to use aws-sdk to deploy node app to elastic beanstalk",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "nodejs",
+    "aws",
+    "elasticbeanstalk",
+    "docker"
+  ],
+  "author": "smkgeekfreak@gmail.com",
+  "license": "ISC",
+  "devDependencies": {
+    "aws-sdk": "^2.1.23",
+    "del": "^1.1.1",
+    "fs": "0.0.2",
+    "gulp": "^3.8.11",
+    "gulp-awspublish": "^1.0.6",
+    "gulp-bump": "^0.3.0",
+    "gulp-env": "^0.2.0",
+    "gulp-nodemon": "^2.0.2",
+    "gulp-shell": "^0.4.1",
+    "gulp-util": "^3.0.4",
+    "gulp-zip": "^3.0.2",
+    "run-sequence": "^1.0.2"
+  },
+  "dependencies": {
+    "hapi": "^8.4.0"
+  }
+}

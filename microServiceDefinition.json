@@ -1,0 +1,13 @@
+{
+    "comment": "This document describes the microservice being deployed to elastic beanstalk. It should be created by the microservice developer at the time they wish to begin deploying this microservice to run on aws elasticbeanstalk.",
+    "awsCredentialsProfile" :"ocapi",
+    "elasticbeanstalk": {
+        "ebAppName": "DockerNodeFromGulp",
+        "ebAppDesc": "Node.js application deployed using Docker container",
+        "ebEnvName": "dockernodefromgulp-dev",
+        "region":"us-east-1"
+    },
+    "s3": {
+        "bucket": "dockernodefromgulp"
+    }
+}

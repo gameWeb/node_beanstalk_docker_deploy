@@ -1,0 +1,7 @@
+nodesvr:
+  build: .
+  command: node server.js
+  ports:
+   - "3008:3007"
+  volumes:
+   - .:/src

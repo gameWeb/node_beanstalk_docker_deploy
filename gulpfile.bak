@@ -1,0 +1,324 @@
+var gulp = require('gulp');
+var nodemon = require('gulp-nodemon');
+var runSequence = require('run-sequence');
+var clean = require('del');
+var AWS = require('aws-sdk');
+var bump = require('gulp-bump');
+var zip = require('gulp-zip');
+var shell = require('gulp-shell');
+var env = require('gulp-env');
+var awspublish = require('gulp-awspublish');
+var gutil = require('gulp-util');
+
+var deployDir = '_deploy';
+var awsCreds = new AWS.Credentials({
+    sslEnabled: true,
+    maxRetries: 10,
+    maxRedirects: 10
+});
+var appConfig = {
+    ebAppName: 'test_docker_node_app',
+    ebEnvName: 'testDockerNodeApp-env',
+    bucket: 'testebnodedocker'
+};
+
+var packageFileVersion = function () {
+    delete require.cache[require.resolve('./package.json')]; //uncache the module
+    return require('./package.json').version;
+}
+var archiveName = function (extension) {
+    return appConfig.ebAppName + '_v' + packageFileVersion() + extension;
+}
+
+var ebs; // Elastic Beanstalk SDK interface
+
+
+gulp.task('setup-ebs', ['setup-env'], function (done) {
+    //var tasks = [];
+    //tasks.push('echo ebs AWS_PROFILE = $AWS_PROFILE');
+    //shell.task(tasks)();
+    ebs = new AWS.ElasticBeanstalk(
+        options = {
+            //credentials: awsCreds,
+            region: 'us-east-1'
+        },
+        {
+            apiVersion: '2010-12-01'
+        }
+    );
+    done();
+});
+//
+// AWS.ElasticBeanstalk utility functions
+//
+var createEbApp = function (ebs, app, done) {
+    //var params = {
+    //    ApplicationName: 'test_docker_node_app', /* required */
+    //    Description: 'Testing creation of a docker node app'
+    //};
+    req = ebs.createApplication(app, function (err, data) {
+        if (err) console.log(err, err.stack); // an error occurred
+        else     console.log(data);           // successful response
+        done();
+    });
+    //req.on('success', function(response) {
+    //    console.log(response.data);
+    //    done();
+    //});
+};
+
+
+gulp.task('deploy-app', ['setup-ebs'], function (done) {
+    var appParams = {
+        ApplicationName: appConfig.ebAppName, /* required */
+        VersionLabel: packageFileVersion(), /* required */
+        Description: packageFileVersion(),
+        SourceBundle: {
+            S3Bucket: appConfig.bucket,
+            S3Key: archiveName('.zip')
+        }
+    };
+    createAppVersion(appParams, done)
+});
+
+var createAppVersion = function (appVer, done) {
+    gutil.log(gutil.colors.yellow('[DEBUG]:\n' + JSON.stringify(appVer)));
+    req = ebs.createApplicationVersion(appVer, function (err, data) {
+        if (err) {
+            gutil.log(gutil.colors.red('[FAILED]:\n' + err, err.stack)); // an error occurred
+        }
+        else {
+            //console.log(data);
+            gutil.log(gutil.colors.green('[SUCCESS]:\n' + data)); // an error occurred
+        }           // successful response
+        done();
+    });
+};
+
+var rollMinorVersion = function () {
+    return gulp.src('./package.json')
+        .pipe(bump({type: 'minor'}))
+        .pipe(gulp.dest('./'));
+}
+var rollMajorVersion = function () {
+    return gulp.src('./package.json')
+        .pipe(bump({type: 'minor'}))
+        .pipe(gulp.dest('./'));
+}
+
+gulp.task('app-bucket', ['setup-env'], function (done) {
+    createAppBucket(appConfig.bucket);
+    done();
+});
+var createAppBucket = function (name, done) {
+    var params = {
+        Bucket: name, /* required */
+        ACL: 'authenticated-read'
+    };
+
+    var s3 = new AWS.S3();
+    s3.createBucket({Bucket: name}, function (err, data) {
+        if (err) {
+            console.log("An error occurred", err);
+            done();
+        }
+        else {
+            console.log("Created bucket at", data.Location);
+        }
+        return data.Location;
+    });
+};
+//gulp.task('deploy-dev', function (done) {
+//    uploadAppVersion(appConfig.bucket, 'deploy_v0.0.8.zip', done)
+//});
+//var uploadAppVersion = function (bucket, key, zip, done) {
+//    var fs = require('fs')
+//    var body = fs.createReadStream(key);
+//
+//// Upload the stream
+//    var s3 = new AWS.S3({params: {Bucket: bucket, Key: key}});
+//    console.log(JSON.stringify(s3));
+//    s3.upload({Body: body}, function (err, data) {
+//        if (err) {
+//            console.log("An error occurred", err);
+//        }
+//        else {
+//            console.log("Uploaded the file at", data.Location);
+//        }
+//    })
+//}
+
+gulp.task('stage-files', function (done) {
+    gulp.src('./.dockerignore')
+        .pipe(gulp.dest(deployDir));
+    gulp.src('./Dockerfile')
+        .pipe(gulp.dest(deployDir));
+    gulp.src('./package.json')
+        .pipe(gulp.dest(deployDir));
+    gulp.src('./server.js')
+        .pipe(gulp.dest(deployDir));
+    done();
+});
+gulp.task('clean-stage', function (done) {
+    clean([
+        deployDir
+    ], done);
+});
+
+gulp.task('nodemon', function () {
+
+});
+
+gulp.task('test', function () {
+    nodemon({
+        script: 'npm test'
+        , env: {'NODE_ENV': 'test'}
+    });
+});
+
+gulp.task('build', function (done) {
+    done();
+});
+
+gulp.task('debug', ['nodemon'], function () {
+    nodemon({
+        script: 'server.js'
+        , env: {'NODE_ENV': 'development'}
+    });
+});
+
+gulp.task('eb-deploy', ['setup-ebs', 'stage'], function (done) {
+    //var creds = new AWS.Credentials({
+    //    sslEnabled: true,
+    //    maxRetries: 10,
+    //    maxRedirects: 10
+    //});
+    //var ebs = new AWS.ElasticBeanstalk(
+    //    options = {
+    //        credentials: awsCreds,
+    //        region: 'us-east-1'
+    //    },
+    //    {
+    //        apiVersion: '2010-12-01'
+    //    }
+    //);
+    //var req = ebs.listAvailableSolutionStacks({}, done);
+    //// register callbacks on request to retrieve response data
+    //req.on('success', function(response) {
+    //    console.log(response.data);
+    //});
+    var env_params = {
+        EnvironmentId: 'e-pxzcf3p5yt',
+        EnvironmentName: 'ocapimyhapi-env'
+    };
+    req = ebs.describeEnvironmentResources(env_params, function (err, data) {
+        if (err) console.log(err, err.stack); // an error occurred
+        else     console.log(JSON.stringify(data));           // successful response
+    });
+
+    var envopt_params = {
+        ApplicationName: 'ocapimyhapi',
+        EnvironmentName: 'ocapimyhapi-env'
+    };
+    req = ebs.describeConfigurationSettings(envopt_params, function (err, data) {
+        if (err) console.log(err, err.stack); // an error occurred
+        else     console.log(JSON.stringify(data));           // successful response
+    });
+
+    //req.on('success', function(response) {
+    //    console.log(response.data);
+    //});
+
+    var app_params = {
+        ApplicationName: 'test_docker_node_app', /* required */
+        Description: 'Testing creation of a docker node app'
+    };
+
+    // createEbApp(ebs,app_params, done)
+
+    //var desc_params = {
+    //    ApplicationNames: [
+    //        'test_docker_node_app', /* required */
+    //    ]
+    //};
+    //ebs.describeApplications(desc_params, function(err, data) {
+    //    if (err) console.log(err, err.stack); // an error occurred
+    //    else     console.log(data);           // successful response
+    //});
+});
+
+gulp.task('update-minor-version', function () {
+    return rollMinorVersion();
+})
+
+
+gulp.task('update-patch-version', function () {
+    gutil.log(gutil.colors.yellow('[DEBUG]: current package.json version =' + packageFileVersion()));
+    return gulp.src('./package.json')
+        .pipe(bump({type: 'patch'}))
+        .pipe(gulp.dest('./'));
+});
+gulp.task('echo-package-version', function () {
+    gutil.log(gutil.colors.yellow('[DEBUG]: current package.json version =' + packageFileVersion()));
+    gutil.log(gutil.colors.yellow('[DEBUG]: current package.json version =' + archiveName('.zip')));
+});
+
+// Now the deploy directory is ready to go. Zip it.
+gulp.task('zip', function (done) {
+    console.log('ziping version = ' + archiveName('.zip'));
+    gulp.src(deployDir + '/*')
+        .pipe(zip(archiveName('.zip')))
+        .pipe(gulp.dest('./'));
+    done();
+});
+
+
+gulp.task('stage', ['setup-env', 'clean-stage'], function (done) {
+    runSequence('stage-files', 'update-patch-version', 'zip', function () {
+        done();
+    });
+});
+
+/**
+ * start a local docker instance via docker compose
+ */
+gulp.task('dc-start', function (done) {
+    var tasks = [];
+    tasks.push('docker-compose start nodesvr');
+    shell.task(tasks)();
+    done();
+});
+
+gulp.task('setup-env', function (done) {
+    env({
+        vars: {
+            AWS_PROFILE: 'ocapi',
+            NODE_ENV: 'developmenet'
+        }
+    })
+    var credentials = new AWS.SharedIniFileCredentials({profile: 'ocapi'});
+    AWS.config.credentials = credentials;
+    AWS.config.update({region: 'us-east-1'});
+
+    var arch = archiveName('.zip');
+    console.log('arch=' + arch);
+
+    var tasks = [];
+    tasks.push('echo NODE_ENV = $NODE_ENV');
+    tasks.push('echo AWS_PROFILE = $AWS_PROFILE');
+    shell.task(tasks)();
+    done();
+});
+gulp.task('pub', ['setup-env'], function (done) {
+    var publisher = awspublish.create({bucket: appConfig.bucket});
+    console.log(JSON.stringify(publisher));
+    gulp.src(archiveName('.zip')).pipe(publisher.publish()).pipe(awspublish.reporter());
+    done();
+});
+/**
+ * By default gulp will build and run server locally in debug
+ */
+gulp.task('default', function () {
+    runSequence('build', 'debug');
+});
+
