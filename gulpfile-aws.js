@@ -95,7 +95,7 @@ gulp.task('create-app-bucket', ['setup-aws-env'], function (done) {
 /**
  *
  */
-gulp.task('create-eb-app-ver', ['setup-ebs'], function (done) {
+gulp.task('create-eb-app-version', ['setup-ebs'], function (done) {
     var appParams = {
         ApplicationName: microservice.definition.elasticbeanstalk.ebAppName, /* required */
         VersionLabel: microservice.version(), /* required */
@@ -109,7 +109,7 @@ gulp.task('create-eb-app-ver', ['setup-ebs'], function (done) {
 });
 
 
-gulp.task('update-eb-env', ['setup-ebs'], function (done) {
+gulp.task('load-eb-app-version', ['setup-ebs'], function (done) {
     var params = {
         EnvironmentName: microservice.definition.elasticbeanstalk.ebEnvName, /* required */
         VersionLabel: microservice.version(),
@@ -119,48 +119,48 @@ gulp.task('update-eb-env', ['setup-ebs'], function (done) {
 
 });
 
-gulp.task('eb-deploy', ['setup-ebs'], function (done) {
-    var env_params = {
-        EnvironmentId: 'e-pxzcf3p5yta',
-        EnvironmentName: 'ocapimyhapi-enva'
-    };
-    ebs.describeEnvironmentResources(env_params, function (err, data) {
-        if (err)  gutil.log(gutil.colors.magenta('[STACKTRACE]:' + err, err.stack)); // an error occurred
-    }).on('success', function (response) {
-        gutil.log(gutil.colors.green('[SUCCESS]:' + JSON.stringify(response.data)));
-    }).on('error', function (response, err) {
-        gutil.log(gutil.colors.red('[FAILURE]:' + JSON.stringify(response)));
-    });
+//gulp.task('debug-eb', ['setup-ebs'], function (done) {
+//    var env_params = {
+//        EnvironmentId: 'e-pxzcf3p5yta',
+//        EnvironmentName: 'ocapimyhapi-enva'
+//    };
+//    ebs.describeEnvironmentResources(env_params, function (err, data) {
+//        if (err)  gutil.log(gutil.colors.magenta('[STACKTRACE]:' + err, err.stack)); // an error occurred
+//    }).on('success', function (response) {
+//        gutil.log(gutil.colors.green('[SUCCESS]:' + JSON.stringify(response.data)));
+//    }).on('error', function (response, err) {
+//        gutil.log(gutil.colors.red('[FAILURE]:' + JSON.stringify(response)));
+//    });
+//
+//    var envopt_params = {
+//        ApplicationName: 'ocapimyhapi1',
+//        EnvironmentName: 'ocapimyhapi-env1'
+//    };
+//
+//    ebs.describeConfigurationSettings(envopt_params, function (err, data) {
+//        if (err)  gutil.log(gutil.colors.magenta('[STACKTRACE]:' + err, err.stack)); // an error occurred
+//    })
+//
+//
+//    var app_params = {
+//        ApplicationName: 'test_docker_node_app', /* required */
+//        Description: 'Testing creation of a docker node app'
+//    };
+//
+//    // createEbApp(ebs,app_params, done)
+//
+//    //var desc_params = {
+//    //    ApplicationNames: [
+//    //        'test_docker_node_app', /* required */
+//    //    ]
+//    //};
+//    //ebs.describeApplications(desc_params, function(err, data) {
+//    //    if (err) console.log(err, err.stack); // an error occurred
+//    //    else     console.log(data);           // successful response
+//    //});
+//});
 
-    var envopt_params = {
-        ApplicationName: 'ocapimyhapi1',
-        EnvironmentName: 'ocapimyhapi-env1'
-    };
-
-    ebs.describeConfigurationSettings(envopt_params, function (err, data) {
-        if (err)  gutil.log(gutil.colors.magenta('[STACKTRACE]:' + err, err.stack)); // an error occurred
-    })
-
-
-    var app_params = {
-        ApplicationName: 'test_docker_node_app', /* required */
-        Description: 'Testing creation of a docker node app'
-    };
-
-    // createEbApp(ebs,app_params, done)
-
-    //var desc_params = {
-    //    ApplicationNames: [
-    //        'test_docker_node_app', /* required */
-    //    ]
-    //};
-    //ebs.describeApplications(desc_params, function(err, data) {
-    //    if (err) console.log(err, err.stack); // an error occurred
-    //    else     console.log(data);           // successful response
-    //});
-});
-
-gulp.task('publish-version', ['setup-aws-env'], function (done) {
+gulp.task('publish-app-version', ['setup-aws-env'], function (done) {
     gutil.log(gutil.colors.yellow('[DEBUG]: bucket=' + JSON.stringify(microservice.definition.s3.bucket)));
     try {
         var publisher = awspublish.create({bucket: microservice.definition.s3.bucket});
@@ -173,7 +173,7 @@ gulp.task('publish-version', ['setup-aws-env'], function (done) {
     } catch(err) {
         gutil.log(gutil.colors.red('[ERROR]: '+ err));
     }
-    //done();
+    done();
 });
 
 var ebs; // Elastic Beanstalk SDK interface
@@ -212,5 +212,15 @@ gulp.task('setup-aws-env', function (done) {
     //gutil.log(gutil.colors.yellow('[DEBUG]: env =' + JSON.stringify(process.env)));
     done();
 });
+/**
+ * Stage files for deployment, update the patch version and zip up the
+ * files into an archive.
+ */
+gulp.task('eb-deploy', ['setup-ebs'], function (done) {
+    runSequence('create-app-bucket', 'publish-app-version', 'create-eb-app-version', 'load-eb-app-version', function () {
+            done();
+        });
+});
+
 
 
