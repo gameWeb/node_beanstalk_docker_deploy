@@ -5,79 +5,18 @@ var shell = require('gulp-shell');
 var env = require('gulp-env');
 var awspublish = require('gulp-awspublish');
 var gutil = require('gulp-util');
-var microDefinition = require('./microserviceDefinition.json');
+//var microDefinition = require('./microserviceDefinition.json');
+var microservice = require('./microservice');
+module.exports.microservice = microservice;
 
-var validateMicroDefinition = function (err) {
-    if (!microDefinition) {
-        //gutil.log(gutil.colors.red('[INVALID CONFIG]: microserviceDefinition.json does not exist'));
-        return err('microserviceDefinition.json does not exist');
-    }
-    if (!microDefinition.awsCredentialsProfile ){
-        gutil.log(gutil.colors.red('[INVALID CONFIG]: microservice definition does not contain awsCredentialsProfile. Using default profile'));
-        microDefinition.awsCredentialsProfile = 'default';
-        //return err('microservice definition does not contain awsCredentialsProfile');
-    }
-    if (!microDefinition.elasticbeanstalk.ebAppName) {
-        //gutil.log(gutil.colors.red('[INVALID CONFIG]: microservice definition does not contain ebAppName'));
-        return err('microservice definition does not contain ebAppName');
-    }
-    if (!microDefinition.elasticbeanstalk.ebEnvName) {
-        //gutil.log(gutil.colors.red('[INVALID CONFIG]: microservice definition does not contain ebEnvName'));
-        return err('microservice definition does not contain ebEnvName');
-    }
-    if (!microDefinition.elasticbeanstalk.region) {
-        //gutil.log(gutil.colors.red('[INVALID CONFIG]: microservice definition does not contain region'));
-        return err('microservice definition does not contain region');
-    }
-    if (!microDefinition.s3.bucket) {
-        //gutil.log(gutil.colors.red('[INVALID CONFIG]: microservice definition does not contain s3.bucket'));
-        return err('microservice definition does not contain s3.bucket');
-    }
+gutil.log(gutil.colors.blue.inverse('[MICROSERVICE]:\n' + JSON.stringify(microservice, null, '\t')));
 
-    gutil.log(gutil.colors.green.inverse('[VALID CONFIG]:\n' + JSON.stringify(microDefinition, null, '\t')));
-}
-
-var awsCreds = new AWS.Credentials({
-    sslEnabled: true,
-    maxRetries: 10,
-    maxRedirects: 10
-});
-
-var packageFileVersion = function () {
-    delete require.cache[require.resolve('./package.json')]; //uncache the module
-    return require('./package.json').version;
-}
-var archiveName = function (extension) {
-    return microDefinition.elasticbeanstalk.ebAppName + '_v' + packageFileVersion() + extension;
-}
-
-var ebs; // Elastic Beanstalk SDK interface
-
-gulp.task('setup-ebs', ['setup-aws-env'], function (done) {
-    ebs = new AWS.ElasticBeanstalk(
-        options = {
-            //credentials: awsCreds,
-            region: microDefinition.elasticbeanstalk.region
-        },
-        {
-            apiVersion: '2010-12-01'
-        }
-    );
-    done();
-});
 //
 // AWS.ElasticBeanstalk utility functions
 //
-gulp.task('createEbApp', ['setup-ebs'], function (done) {
-    var app_params = {
-        ApplicationName: microDefinition.elasticbeanstalk.ebAppName, /* required */
-        Description: microDefinition.ebAppDesc
-    };
-    createEbApp(ebs, app_params, done)
-});
 
-var createEbApp = function (ebs, appOpts, done) {
-    req = ebs.createApplication(appOpts, function (err, data) {
+var createEbApp = function (eb, appOpts, done) {
+    req = eb.createApplication(appOpts, function (err, data) {
         if (err)  gutil.log(gutil.colors.magenta('[STACKTRACE]:' + err, err.stack)); // an error occurred
     }).on('success', function (response) {
         gutil.log(gutil.colors.green('[SUCCESS]:' + JSON.stringify(response.data)));
@@ -86,23 +25,9 @@ var createEbApp = function (ebs, appOpts, done) {
     });
 };
 
-
-gulp.task('deploy-app', ['setup-ebs'], function (done) {
-    var appParams = {
-        ApplicationName: microDefinition.elasticbeanstalk.ebAppName, /* required */
-        VersionLabel: packageFileVersion(), /* required */
-        Description: packageFileVersion(),
-        SourceBundle: {
-            S3Bucket: microDefinition.s3.bucket,
-            S3Key: archiveName('.zip')
-        }
-    };
-    createAppVersion(appParams, done)
-});
-
-var createAppVersion = function (appVer, done) {
+var createAppVersion = function (eb, appVer, done) {
     gutil.log(gutil.colors.yellow('[DEBUG]:\n' + JSON.stringify(appVer)));
-    req = ebs.createApplicationVersion(appVer, function (err, data) {
+    req = eb.createApplicationVersion(appVer, function (err, data) {
         if (err) {
             gutil.log(gutil.colors.red('[FAILED]:\n' + err, err.stack)); // an error occurred
         }
@@ -113,10 +38,6 @@ var createAppVersion = function (appVer, done) {
     });
 };
 
-gulp.task('app-bucket', ['setup-aws-env'], function (done) {
-    createAppBucket(microDefinition.s3.bucket);
-    done();
-});
 var createAppBucket = function (name, done) {
     var params = {
         Bucket: name, /* required */
@@ -124,7 +45,7 @@ var createAppBucket = function (name, done) {
     };
 
     var s3 = new AWS.S3();
-    s3.createBucket({Bucket: name}, function (err, data) {
+    s3.createBucket({Bucket: name, ACL:'public-read-write'}, function (err, data) {
         //gutil.log(gutil.colors.yellow('[DEBUG]: s3data=' ), data);
         if (err) {
             if (err)  gutil.log(gutil.colors.magenta('[STACKTRACE]:' + err, err.stack)); // an error occurred
@@ -137,15 +58,7 @@ var createAppBucket = function (name, done) {
         gutil.log(gutil.colors.red('[FAILURE]:' + JSON.stringify(response)));
     });
 };
-gulp.task('update-eb-env', ['setup-ebs'], function (done) {
-    var params = {
-        EnvironmentName: microDefinition.elasticbeanstalk.ebEnvName, /* required */
-        VersionLabel: packageFileVersion(),
-        Description: 'updated with ' + packageFileVersion()
-    };
-    updateEnvironment(ebs, params, done);
 
-});
 var updateEnvironment = function (eb, env, done) {
     gutil.log(gutil.colors.yellow('[DEBUG]:\n' + JSON.stringify(env)));
     eb.updateEnvironment(env, function (err, data) {
@@ -157,6 +70,55 @@ var updateEnvironment = function (eb, env, done) {
     });
     done();
 };
+
+// **************************************************
+// Gulp task for AWS interactions
+// **************************************************
+/**
+ * Intital setup of the Elastic Beanstalk Application based on the microserice configuration
+ */
+gulp.task('create-eb-app', ['setup-ebs'], function (done) {
+    var app_params = {
+        ApplicationName: microservice.definition.elasticbeanstalk.ebAppName, /* required */
+        Description: microservice.definition.ebAppDesc
+    };
+    createEbApp(ebs, app_params, done)
+});
+/**
+ * Create a new S3 bucket for storing archive versions for this microservice
+ */
+gulp.task('create-app-bucket', ['setup-aws-env'], function (done) {
+    createAppBucket(microservice.definition.s3.bucket);
+    done();
+});
+
+/**
+ *
+ */
+gulp.task('create-eb-app-ver', ['setup-ebs'], function (done) {
+    var appParams = {
+        ApplicationName: microservice.definition.elasticbeanstalk.ebAppName, /* required */
+        VersionLabel: microservice.version(), /* required */
+        Description: microservice.version(),
+        SourceBundle: {
+            S3Bucket: microservice.definition.s3.bucket,
+            S3Key: microservice.archiveName('.zip')
+        }
+    };
+    createAppVersion(ebs, appParams, done)
+});
+
+
+gulp.task('update-eb-env', ['setup-ebs'], function (done) {
+    var params = {
+        EnvironmentName: microservice.definition.elasticbeanstalk.ebEnvName, /* required */
+        VersionLabel: microservice.version(),
+        Description: 'updated with ' + microservice.version()
+    };
+    updateEnvironment(ebs, params, done);
+
+});
+
 gulp.task('eb-deploy', ['setup-ebs'], function (done) {
     var env_params = {
         EnvironmentId: 'e-pxzcf3p5yta',
@@ -198,44 +160,56 @@ gulp.task('eb-deploy', ['setup-ebs'], function (done) {
     //});
 });
 
-gulp.task('setup-aws-env', function (done) {
+gulp.task('publish-version', ['setup-aws-env'], function (done) {
+    gutil.log(gutil.colors.yellow('[DEBUG]: bucket=' + JSON.stringify(microservice.definition.s3.bucket)));
+    try {
+        var publisher = awspublish.create({bucket: microservice.definition.s3.bucket});
+        console.log(JSON.stringify(publisher));
+        gutil.log(gutil.colors.yellow('[DEBUG]: archive =' + microservice.archiveName('.zip')));
+        gulp.src(microservice.archiveName('.zip'))
+            .pipe(publisher.publish())
+            .pipe(awspublish.reporter());
 
-    validateMicroDefinition(function (err) {
-        if (err) {
-            gutil.log(gutil.colors.red('[ERROR]: ' + err));
-        } else {
-
-            env({
-                vars: {
-                    AWS_PROFILE: microDefinition.awsCredentialsProfile,
-                    NODE_ENV: 'developmenet'
-                }
-            })
-
-            var credentials = new AWS.SharedIniFileCredentials({profile: microDefinition.awsCredentialsProfile});
-            AWS.config.credentials = credentials;
-            AWS.config.update({region: 'us-east-1'});
-
-            var arch = archiveName('.zip');
-            //dconsole.log('arch=' + arch);
-
-            var tasks = [];
-            tasks.push('echo NODE_ENV = $NODE_ENV');
-            tasks.push('echo AWS_PROFILE = $AWS_PROFILE');
-            shell.task(tasks)();
-            //gutil.log(gutil.colors.yellow('[DEBUG]: env =' + JSON.stringify(process.env)));
-            done();
-        }
-
-    });
+    } catch(err) {
+        gutil.log(gutil.colors.red('[ERROR]: '+ err));
+    }
+    //done();
 });
 
-gulp.task('pub', ['setup-aws-env'], function (done) {
-    gutil.log(gutil.colors.yellow('[DEBUG]: definition =' + JSON.stringify(microDefinition.s3.bucket)));
-    var publisher = awspublish.create({bucket: microDefinition.s3.bucket});
-    console.log(JSON.stringify(publisher));
-    gutil.log(gutil.colors.yellow('[DEBUG]: archive =' + archiveName('.zip')));
-    gulp.src(archiveName('.zip')).pipe(publisher.publish()).pipe(awspublish.reporter());
+var ebs; // Elastic Beanstalk SDK interface
+
+gulp.task('setup-ebs', ['setup-aws-env'], function (done) {
+    ebs = new AWS.ElasticBeanstalk(
+        options = {
+            region: microservice.definition.elasticbeanstalk.region
+        },
+        {
+            apiVersion: '2010-12-01'
+        }
+    );
+    done();
+});
+
+gulp.task('setup-aws-env', function (done) {
+
+    gutil.log(gutil.colors.yellow.inverse('[DEBUG]:' + microservice.definition.name));
+    gutil.log(gutil.colors.yellow.inverse('[DEBUG]:' + microservice.version()));
+    env({
+        vars: {
+            AWS_PROFILE: microservice.definition.awsCredentialsProfile,
+            NODE_ENV: 'developmenet'
+        }
+    });
+
+    var credentials = new AWS.SharedIniFileCredentials({profile: microservice.definition.awsCredentialsProfile});
+    AWS.config.credentials = credentials;
+    AWS.config.update({region: 'us-east-1'});
+
+    var tasks = [];
+    tasks.push('echo NODE_ENV = $NODE_ENV');
+    tasks.push('echo AWS_PROFILE = $AWS_PROFILE');
+    shell.task(tasks)();
+    //gutil.log(gutil.colors.yellow('[DEBUG]: env =' + JSON.stringify(process.env)));
     done();
 });
 

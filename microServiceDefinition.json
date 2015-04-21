@@ -1,4 +1,6 @@
 {
+    "name":"Docker-Node-AWS-Gulp",
+    "desc":"Docker Node AWS Gulp",
     "comment": "This document describes the microservice being deployed to elastic beanstalk. It should be created by the microservice developer at the time they wish to begin deploying this microservice to run on aws elasticbeanstalk.",
     "awsCredentialsProfile" :"ocapi",
     "elasticbeanstalk": {
@@ -8,6 +10,6 @@
         "region":"us-east-1"
     },
     "s3": {
-        "bucket": "dockernodefromgulp"
+        "bucket": "newdockernodefromgulp"
     }
 }

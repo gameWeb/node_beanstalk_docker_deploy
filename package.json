@@ -1,6 +1,6 @@
 {
   "name": "nodebeanstalk_deploy",
-  "version": "0.0.10",
+  "version": "0.0.1",
   "description": "Sample how to use aws-sdk to deploy node app to elastic beanstalk",
   "main": "server.js",
   "scripts": {
